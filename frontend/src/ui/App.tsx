@@ -1,0 +1,991 @@
+import React, { useEffect, useState } from 'react'
+
+type Sweet = {
+  id: number
+  name: string
+  sweet_type: 'weight' | 'count'
+  price_per_kg?: string
+  price_per_unit?: string
+}
+
+type InvoiceItemDraft = {
+  sweetId?: number
+  sweetName?: string
+  mode?: 'weight' | 'count'
+  gross_weight_kg?: string
+  tray_weight_kg?: string
+  count?: string
+  unit_price_override?: string
+  amount?: number
+}
+
+const API_BASE = 'http://127.0.0.1:8000/api'
+
+export default function InvoiceApp() {
+  const [sweets, setSweets] = useState<Sweet[]>([])
+  const [customerName, setCustomerName] = useState('')
+  const [billType, setBillType] = useState<'GST' | 'Non-GST'>('GST')
+  const [paymentMode, setPaymentMode] = useState<'cash' | 'credit'>('cash')
+  const [discountPct, setDiscountPct] = useState('0')
+  const [items, setItems] = useState<InvoiceItemDraft[]>([{}])
+  const [creating, setCreating] = useState(false)
+  const [createdId, setCreatedId] = useState<number | null>(null)
+  const [dmNo, setDmNo] = useState('')
+  // Load sweets from backend
+  useEffect(() => {
+    fetch(`${API_BASE}/sweets/`)
+      .then((res) => res.json())
+      .then((data: Sweet[] | { results?: Sweet[] }) => {
+        setSweets(Array.isArray(data) ? data : data.results ?? [])
+      })
+      .catch(console.error)
+  }, [])
+
+  // Update item and calculate amount
+  const updateItem = (idx: number, patch: Partial<InvoiceItemDraft>) => {
+    setItems((prev) => {
+      const newItems = [...prev]
+      const item = { ...newItems[idx], ...patch }
+      const sweet = sweets.find((s) => s.id === item.sweetId)
+      const mode = item.mode || sweet?.sweet_type
+
+      let unitPrice =
+        item.unit_price_override && item.unit_price_override !== ''
+          ? parseFloat(item.unit_price_override)
+          : mode === 'weight'
+          ? parseFloat(sweet?.price_per_kg || '0')
+          : parseFloat(sweet?.price_per_unit || '0')
+
+      if (mode === 'weight') {
+        const gross = parseFloat(item.gross_weight_kg || '0')
+        const tray = parseFloat(item.tray_weight_kg || '0')
+        const netKg = Math.max(gross - tray, 0)
+        item.amount = netKg * unitPrice
+      } else if (mode === 'count') {
+        const count = parseFloat(item.count || '0')
+        item.amount = count * unitPrice
+      } else {
+        item.amount = 0
+      }
+
+      newItems[idx] = item
+      return newItems
+    })
+  }
+
+  const addRow = () => setItems((prev) => [...prev, {}])
+  const removeRow = (idx: number) => setItems((prev) => prev.filter((_, i) => i !== idx))
+
+  const subtotal = items.reduce((sum, x) => sum + (x.amount || 0), 0)
+  const discount =
+    subtotal *
+    (Math.min(Math.max(parseFloat(discountPct || '0'), 0), 100) / 100)
+  const total = subtotal - discount
+  const gstEnabled = billType === 'GST'
+  const sgst = gstEnabled ? (subtotal - discount) * 0.025 : 0
+  const cgst = gstEnabled ? (subtotal - discount) * 0.025 : 0
+  const finalTotal = (subtotal - discount) + sgst + cgst
+  const inputStyle = {
+    width: '100%',
+    padding: '8px 12px',
+    fontSize: '14px',
+    border: '1px solid #e5e7eb',
+    borderRadius: '6px',
+    outline: 'none',
+    fontFamily: 'inherit',
+  } as React.CSSProperties
+
+  const buttonStyle = {
+    padding: '6px 12px',
+    fontSize: '13px',
+    border: 'none',
+    borderRadius: '6px',
+    cursor: 'pointer',
+    fontWeight: 500,
+  } as React.CSSProperties
+
+  // Create Invoice
+  // async function createInvoice() {
+  //   setCreating(true)
+  //   try {
+  //     // Step 1: Ensure all typed sweets exist
+  //     for (let i = 0; i < items.length; i++) {
+  //       const it = items[i]
+  //       if (!it.sweetId && it.sweetName) {
+  //         let existing = sweets.find(
+  //           (s) => s.name.toLowerCase() === it.sweetName!.toLowerCase()
+  //         )
+
+  //         if (!existing) {
+  //           const formData = new FormData()
+  //           formData.append('name', it.sweetName!)
+  //           formData.append('sweet_type', it.mode || 'weight')
+
+  //           const res = await fetch(`${API_BASE}/sweets/`, {
+  //             method: 'POST',
+  //             body: formData,
+  //           })
+
+  //           if (!res.ok) throw new Error(`Failed to create sweet: ${await res.text()}`)
+  //           existing = await res.json()
+  //           setSweets((prev) => [...prev, existing!])
+  //         }
+
+  //         updateItem(i, { sweetId: existing.id })
+  //       }
+  //     }
+
+  //     // Step 2: Prepare invoice payload
+  //     const payload = {
+  //       customer_name: customerName || undefined,
+  //       discount_percent: discountPct || '0',
+  //       payment_mode: paymentMode,
+  //       bill_type: billType,
+  //       items: items
+  //         .filter((it) => it.sweetId)
+  //         .map((it) => {
+  //           const sweet = sweets.find((s) => s.id === it.sweetId)!
+  //           const mode = it.mode || sweet.sweet_type
+  //           if (mode === 'weight') {
+  //             return {
+  //               sweet: sweet.id,
+  //               gross_weight_kg: it.gross_weight_kg?.toString() || '0',
+  //               tray_weight_kg: it.tray_weight_kg?.toString() || '0',
+  //               unit_price_override: it.unit_price_override || undefined,
+  //             }
+  //           }
+  //           return {
+  //             sweet: sweet.id,
+  //             count: it.count || '0',
+  //             unit_price_override: it.unit_price_override || undefined,
+  //           }
+  //         }),
+  //     }
+
+  //     // Step 3: Create invoice
+  //     const res = await fetch(`${API_BASE}/invoices/`, {
+  //       method: 'POST',
+  //       headers: { 'Content-Type': 'application/json' },
+  //       body: JSON.stringify(payload),
+  //     })
+
+  //     if (!res.ok) throw new Error(await res.text())
+  //     const data = await res.json()
+  //     setCreatedId(data.id)
+  //   } catch (e) {
+  //     console.error(e)
+  //     alert('Failed to create invoice: ' + e)
+  //   } finally {
+  //     setCreating(false)
+  //   }
+  // }
+
+  async function createInvoice() {
+    // Basic validation
+    if (!customerName.trim()) {
+      alert("Customer name is required");
+      return;
+    }
+  
+    if (items.length === 0 || !items.some(it => it.sweetName || it.sweetId)) {
+      alert("Add at least one sweet to create invoice");
+      return;
+    }
+  
+    const discountValue = Math.min(Math.max(parseFloat(discountPct || '0'), 0), 100);
+  
+    setCreating(true);
+    try {
+      const updatedItems = [...items];
+  
+      // Step 1: Ensure all typed sweets exist
+      for (let i = 0; i < updatedItems.length; i++) {
+        const it = updatedItems[i];
+        if (!it.sweetId && it.sweetName?.trim()) {
+          let existing = sweets.find(
+            (s) => s.name.toLowerCase() === it.sweetName!.toLowerCase()
+          );
+  
+          if (!existing) {
+            // Create new sweet
+            const res = await fetch(`${API_BASE}/sweets/`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                name: it.sweetName!.trim(),
+                sweet_type: it.mode || "weight",
+              }),
+            });
+  
+            if (!res.ok) {
+              throw new Error(`Failed to create sweet: ${await res.text()}`);
+            }
+  
+            existing = await res.json();
+            setSweets((prev) => [...prev, existing]); // Update state safely
+          }
+  
+          it.sweetId = existing.id;
+          it.mode = it.mode || existing.sweet_type;
+        }
+      }
+  
+      // Step 2: Calculate amounts safely
+      updatedItems.forEach((it) => {
+        const sweet = sweets.find((s) => s.id === it.sweetId);
+        if (!sweet) return;
+  
+        const mode = it.mode || sweet.sweet_type;
+        const unitPrice =
+          it.unit_price_override && it.unit_price_override.trim() !== ""
+            ? parseFloat(it.unit_price_override)
+            : mode === "weight"
+            ? parseFloat(sweet.price_per_kg || "0")
+            : parseFloat(sweet.price_per_unit || "0");
+  
+        if (mode === "weight") {
+          const gross = parseFloat((it.gross_weight_kg || "0").trim()) || 0;
+          const tray = parseFloat((it.tray_weight_kg || "0").trim()) || 0;
+          const netKg = Math.max(gross - tray, 0);
+          it.amount = parseFloat((netKg * unitPrice).toFixed(2));
+        } else {
+          const count = parseFloat((it.count || "0").trim()) || 0;
+          it.amount = parseFloat((count * unitPrice).toFixed(2));
+        }
+      });
+  
+      // Step 3: Prepare payload
+      const payload = {
+        customer_name: customerName.trim(),
+        dm_no: dmNo.trim() || undefined,
+        discount_percent: discountValue.toString(),
+        payment_mode: paymentMode,
+        bill_type: billType,
+        items: updatedItems
+          .filter((it) => it.sweetId)
+          .map((it) => {
+            const sweet = sweets.find((s) => s.id === it.sweetId)!;
+            const mode = it.mode || sweet.sweet_type;
+            if (mode === "weight") {
+              return {
+                sweet: sweet.id,
+                gross_weight_kg: parseFloat(it.gross_weight_kg || "0"),
+                tray_weight_kg: parseFloat(it.tray_weight_kg || "0"),
+                unit_price_override: it.unit_price_override
+                  ? parseFloat(it.unit_price_override)
+                  : undefined,
+              };
+            }
+            return {
+              sweet: sweet.id,
+              count: parseFloat(it.count || "0"),
+              unit_price_override: it.unit_price_override
+                ? parseFloat(it.unit_price_override)
+                : undefined,
+            };
+          }),
+      };
+  
+      // Step 4: Send invoice to backend
+      const res = await fetch(`${API_BASE}/invoices/`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+  
+      if (!res.ok) throw new Error(await res.text());
+  
+      const data = await res.json();
+      setCreatedId(data.id);
+      alert("Invoice created successfully!");
+    } catch (e) {
+      console.error(e);
+      alert("Failed to create invoice: " + e);
+    } finally {
+      setCreating(false);
+    }
+  }
+
+  const download = (url: string) => {
+    const a = document.createElement('a')
+    a.href = url
+    a.target = '_blank'
+    a.click()
+  }
+
+  return (
+    <div
+      style={{
+        minHeight: '100vh',
+        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+        padding: '32px 24px',
+        fontFamily: 'system-ui, -apple-system, sans-serif',
+      }}
+    >
+      <div
+        style={{
+          maxWidth: '1400px',
+          margin: '0 auto',
+          background: 'white',
+          borderRadius: '16px',
+          boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
+          overflow: 'hidden',
+        }}
+      >
+        {/* Header */}
+        <div
+          style={{
+            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+            padding: '32px 40px',
+            color: 'white',
+          }}
+        >
+          <h1 style={{ margin: 0, fontSize: '32px', fontWeight: 700 }}>
+            Invoice Generator
+          </h1>
+          <p style={{ margin: '8px 0 0 0', opacity: 0.9, fontSize: '16px' }}>
+            Create and manage your invoices efficiently
+          </p>
+        </div>
+
+        <div style={{ padding: '40px' }}>
+          {/* Customer Name */}
+          <div style={{ marginBottom: '32px' }}>
+            <label
+              style={{
+                display: 'block',
+                fontSize: '14px',
+                fontWeight: 600,
+                color: '#374151',
+                marginBottom: '8px',
+              }}
+            >
+              Customer Name
+            </label>
+            <input
+              placeholder="Enter customer name"
+              value={customerName}
+              onChange={(e) => setCustomerName(e.target.value)}
+              style={{
+                ...inputStyle,
+                padding: '12px 16px',
+                fontSize: '15px',
+                border: '2px solid #e5e7eb',
+              }}
+            />
+          </div>
+
+{/* Toggles Section */}
+<div
+  style={{
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: '40px',
+    gap: '40px',
+  }}
+>
+  {/* Mode Toggle */}
+  <div
+    style={{
+      flex: 1,
+      backgroundColor: '#f9fafb',
+      border: '2px solid #e5e7eb',
+      borderRadius: '10px',
+      padding: '16px 20px',
+      boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+      transition: '0.2s ease',
+    }}
+  >
+    <span
+      style={{
+        display: 'block',
+        fontSize: '14px',
+        fontWeight: 600,
+        color: '#374151',
+        marginBottom: '12px',
+      }}
+    >
+      Mode
+    </span>
+    <div style={{ display: 'flex', gap: '24px' }}>
+<label
+  style={{
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    fontSize: '15px',
+    color: '#374151',
+    cursor: 'pointer',
+    transition: '0.2s',
+  }}
+>
+  <input
+    type="radio"
+    name="paymentMode"
+    value="cash"
+    checked={paymentMode === 'cash'}
+    onChange={() => setPaymentMode('cash')}
+    style={{
+      accentColor: '#10b981',
+      transform: 'scale(1.15)',
+      cursor: 'pointer',
+    }}
+  />
+  <span>Cash</span>
+</label>
+
+<label
+  style={{
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    fontSize: '15px',
+    color: '#374151',
+    cursor: 'pointer',
+    transition: '0.2s',
+  }}
+>
+  <input
+    type="radio"
+    name="paymentMode"
+    value="credit"
+    checked={paymentMode === 'credit'}
+    onChange={() => setPaymentMode('credit')}
+    style={{
+      accentColor: '#10b981',
+      transform: 'scale(1.15)',
+      cursor: 'pointer',
+    }}
+  />
+  <span>Credit</span>
+</label>
+
+    </div>
+  </div>
+
+  {/* Bill Type Toggle */}
+  <div
+    style={{
+      flex: 1,
+      backgroundColor: '#f9fafb',
+      border: '2px solid #e5e7eb',
+      borderRadius: '10px',
+      padding: '16px 20px',
+      boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+      transition: '0.2s ease',
+    }}
+  >
+    <span
+      style={{
+        display: 'block',
+        fontSize: '14px',
+        fontWeight: 600,
+        color: '#374151',
+        marginBottom: '12px',
+      }}
+    >
+      Bill Type
+    </span>
+    <div style={{ display: 'flex', gap: '24px' }}>
+      <label
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+          fontSize: '15px',
+          color: '#374151',
+          cursor: 'pointer',
+          transition: '0.2s',
+        }}
+      >
+        <input
+          type="radio"
+          name="billType"
+          checked={billType === 'GST'}
+          onChange={() => setBillType('GST')}
+          style={{
+            accentColor: '#3b82f6',
+            transform: 'scale(1.15)',
+            cursor: 'pointer',
+          }}
+        />
+        <span>GST</span>
+      </label>
+
+      <label
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+          fontSize: '15px',
+          color: '#374151',
+          cursor: 'pointer',
+          transition: '0.2s',
+        }}
+      >
+        <input
+          type="radio"
+          name="billType"
+          checked={billType === 'Non-GST'}
+          onChange={() => setBillType('Non-GST')}
+          style={{
+            accentColor: '#3b82f6',
+            transform: 'scale(1.15)',
+            cursor: 'pointer',
+          }}
+        />
+        <span>Non-GST</span>
+      </label>
+    </div>
+  </div>
+</div>
+
+{/* DM No. Input Box */}
+<div
+  style={{
+    flex: 1,
+    backgroundColor: '#f9fafb',
+    border: '2px solid #e5e7eb',
+    borderRadius: '10px',
+    padding: '16px 40px 10px 20px',
+    boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+    transition: '0.2s ease',
+  }}
+>
+  <label
+    style={{
+      display: 'block',
+      fontSize: '14px',
+      fontWeight: 600,
+      color: '#374151',
+      marginBottom: '12px',
+    }}
+  >
+    DM No.
+  </label>
+  <input
+    type="text"
+    placeholder="Enter DM number"
+    value={dmNo}
+    onChange={(e) => setDmNo(e.target.value)}
+    style={{
+      width: '100%',
+      padding: '10px 14px',
+      fontSize: '15px',
+      border: '2px solid #e5e7eb',
+      borderRadius: '8px',
+      outline: 'none',
+      backgroundColor: 'white',
+      fontFamily: 'inherit',
+    }}
+  />
+</div>
+
+
+          {/* Items Table */}
+          <div
+            style={{
+              overflowX: 'auto',
+              marginBottom: '24px',
+              border: '1px solid #e5e7eb',
+              borderRadius: '12px',
+            }}
+          >
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr style={{ background: 'linear-gradient(to right, #f9fafb, #f3f4f6)' }}>
+                  <th style={{ textAlign: 'left', padding: '16px' }}>SWEET</th>
+                  <th style={{ textAlign: 'left', padding: '16px' }}>MODE</th>
+                  <th style={{ textAlign: 'left', padding: '16px' }}>GROSS (KG)</th>
+                  <th style={{ textAlign: 'left', padding: '16px' }}>TRAY (KG)</th>
+                  <th style={{ textAlign: 'left', padding: '16px' }}>COUNT</th>
+                  <th style={{ textAlign: 'right', padding: '16px' }}>UNIT PRICE</th>
+                  <th style={{ textAlign: 'right', padding: '16px' }}>AMOUNT (₹)</th>
+                  <th style={{ padding: '16px', width: '60px' }}></th>
+                </tr>
+              </thead>
+
+              <tbody>
+                {items.map((it, idx) => {
+                  const sweet = sweets.find((s) => s.id === it.sweetId)
+                  const mode = it.mode || sweet?.sweet_type
+                  const amount = it.amount || 0
+
+                  return (
+                    <tr key={idx} style={{ borderBottom: '1px solid #f3f4f6' }}>
+                      <td style={{ padding: '12px 16px' }}>
+                        <input
+                          list={`sweets-list-${idx}`}
+                          placeholder="Type sweet name"
+                          value={it.sweetName ?? sweet?.name ?? ''}
+                          onChange={(e) => {
+                            const name = e.target.value
+                            const found = sweets.find(
+                              (s) => s.name.toLowerCase() === name.toLowerCase()
+                            )
+                            updateItem(idx, {
+                              sweetName: name,
+                              sweetId: found?.id,
+                              mode: found ? it.mode ?? found.sweet_type : it.mode,
+                            })
+                          }}
+                          style={inputStyle}
+                        />
+                        <datalist id={`sweets-list-${idx}`}>
+                          {sweets.map((s) => (
+                            <option key={s.id} value={s.name} />
+                          ))}
+                        </datalist>
+                      </td>
+
+                      <td style={{ padding: '12px 16px' }}>
+                        <div style={{ display: 'flex', gap: '12px' }}>
+                          <label
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '6px',
+                              fontSize: '14px',
+                            }}
+                          >
+                            <input
+                              type="radio"
+                              name={`mode-${idx}`}
+                              checked={mode === 'weight'}
+                              onChange={() => updateItem(idx, { mode: 'weight' })}
+                            />
+                            Weight
+                          </label>
+                          <label
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '6px',
+                              fontSize: '14px',
+                            }}
+                          >
+                            <input
+                              type="radio"
+                              name={`mode-${idx}`}
+                              checked={mode === 'count'}
+                              onChange={() => updateItem(idx, { mode: 'count' })}
+                            />
+                            Count
+                          </label>
+                        </div>
+                      </td>
+
+                      <td style={{ padding: '12px 16px' }}>
+                        <input
+                          type="number"
+                          step="0.001"
+                          placeholder="0.000"
+                          value={it.gross_weight_kg ?? ''}
+                          onChange={(e) =>
+                            updateItem(idx, { gross_weight_kg: e.target.value })
+                          }
+                          disabled={mode !== 'weight'}
+                          style={{
+                            ...inputStyle,
+                            background: mode !== 'weight' ? '#f9fafb' : 'white',
+                          }}
+                        />
+                      </td>
+
+                      <td style={{ padding: '12px 16px' }}>
+                        <input
+                          type="number"
+                          step="0.001"
+                          placeholder="0.000"
+                          value={it.tray_weight_kg ?? ''}
+                          onChange={(e) =>
+                            updateItem(idx, { tray_weight_kg: e.target.value })
+                          }
+                          disabled={mode !== 'weight'}
+                          style={{
+                            ...inputStyle,
+                            background: mode !== 'weight' ? '#f9fafb' : 'white',
+                          }}
+                        />
+                      </td>
+
+                      <td style={{ padding: '12px 16px' }}>
+                        <input
+                          type="number"
+                          value={it.count ?? ''}
+                          onChange={(e) => updateItem(idx, { count: e.target.value })}
+                          disabled={mode !== 'count'}
+                          style={{
+                            ...inputStyle,
+                            background: mode !== 'count' ? '#f9fafb' : 'white',
+                          }}
+                        />
+                      </td>
+
+                      <td style={{ padding: '12px 16px' }}>
+                        <div
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'flex-end',
+                            gap: '8px',
+                          }}
+                        >
+                          <input
+                            style={{
+                              ...inputStyle,
+                              width: '100px',
+                              textAlign: 'right',
+                            }}
+                            type="number"
+                            step="0.01"
+                            placeholder={mode === 'weight' ? 'per kg' : 'per pc'}
+                            value={it.unit_price_override ?? ''}
+                            onChange={(e) =>
+                              updateItem(idx, { unit_price_override: e.target.value })
+                            }
+                          />
+                          <span
+                            style={{
+                              color: '#9ca3af',
+                              fontSize: '13px',
+                              minWidth: '40px',
+                            }}
+                          >
+                            {mode === 'weight' ? '/ kg' : '/ pc'}
+                          </span>
+                        </div>
+                      </td>
+
+                      <td
+                        style={{
+                          textAlign: 'right',
+                          padding: '12px 16px',
+                          fontWeight: 600,
+                          fontSize: '15px',
+                          color: '#374151',
+                        }}
+                      >
+                        {amount.toFixed(2)}
+                      </td>
+
+                      <td style={{ padding: '12px 16px', textAlign: 'center' }}>
+                        <button
+                          onClick={() => removeRow(idx)}
+                          style={{
+                            ...buttonStyle,
+                            background: '#fee2e2',
+                            color: '#dc2626',
+                          }}
+                        >
+                          Remove
+                        </button>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          <button
+            onClick={addRow}
+            style={{
+              padding: '12px 24px',
+              fontSize: '15px',
+              background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+              color: 'white',
+              border: 'none',
+              borderRadius: '8px',
+              cursor: 'pointer',
+              fontWeight: 600,
+              boxShadow: '0 4px 12px rgba(102, 126, 234, 0.4)',
+            }}
+          >
+            + Add Item
+          </button>
+
+          {/* Summary Section */}
+          <div
+            style={{
+              marginTop: '40px',
+              display: 'flex',
+              justifyContent: 'flex-end',
+            }}
+          >
+            <div
+              style={{
+                minWidth: '400px',
+                background: '#f9fafb',
+                borderRadius: '12px',
+                padding: '24px',
+                border: '2px solid #e5e7eb',
+              }}
+            >
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  marginBottom: '16px',
+                }}
+              >
+                <span style={{ color: '#6b7280', fontWeight: 500 }}>Subtotal:</span>
+                <span style={{ fontWeight: 600, color: '#374151' }}>
+                  ₹ {subtotal.toFixed(2)}
+                </span>
+              </div>
+
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  marginBottom: '16px',
+                  paddingBottom: '16px',
+                  borderBottom: '2px solid #e5e7eb',
+                }}
+              >
+                <span style={{ color: '#6b7280', fontWeight: 500 }}>Discount:</span>
+                
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <input
+                    type="number"
+                    min={0}
+                    max={100}
+                    value={discountPct}
+                    onChange={(e) => setDiscountPct(e.target.value)}
+                    style={{
+                      width: '80px',
+                      padding: '8px 12px',
+                      fontSize: '15px',
+                      border: '2px solid #e5e7eb',
+                      borderRadius: '6px',
+                      textAlign: 'right',
+                      outline: 'none',
+                    }}
+                  />
+                  
+                  <span
+                    style={{
+                      color: '#6b7280',
+                      fontWeight: 500,
+                      minWidth: '100px',
+                    }}
+                  >
+                    % (₹ {discount.toFixed(2)})
+                  </span>
+                </div>
+              </div>
+{/* GST Section (only visible if Bill Type is GST) */}
+{gstEnabled && (
+  <div
+    style={{
+      marginBottom: '16px',
+      paddingBottom: '16px',
+      borderBottom: '2px solid #e5e7eb',
+    }}
+  >
+    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
+      <span style={{ color: '#6b7280', fontWeight: 500 }}>SGST (2.5%):</span>
+      <span style={{ fontWeight: 600, color: '#374151' }}>₹ {sgst.toFixed(2)}</span>
+    </div>
+    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+      <span style={{ color: '#6b7280', fontWeight: 500 }}>CGST (2.5%):</span>
+      <span style={{ fontWeight: 600, color: '#374151' }}>₹ {cgst.toFixed(2)}</span>
+    </div>
+  </div>
+)}
+
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  fontSize: '20px',
+                }}
+              >
+                <span style={{ fontWeight: 700, color: '#1f2937' }}>Total:</span>
+                <span style={{ fontWeight: 700, color: '#667eea' }}>
+                  ₹ {finalTotal.toFixed(2)}
+                </span>
+              </div>
+              
+            </div>
+          </div>
+
+          {/* Action Buttons */}
+          <div
+            style={{
+              marginTop: '32px',
+              display: 'flex',
+              gap: '12px',
+              justifyContent: 'flex-end',
+              flexWrap: 'wrap',
+            }}
+          >
+            <button
+              disabled={creating}
+              onClick={createInvoice}
+              style={{
+                padding: '14px 32px',
+                fontSize: '16px',
+                background: creating
+                  ? '#9ca3af'
+                  : 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                color: 'white',
+                border: 'none',
+                borderRadius: '8px',
+                cursor: creating ? 'not-allowed' : 'pointer',
+                fontWeight: 600,
+              }}
+            >
+              {creating ? 'Creating...' : 'Create Invoice'}
+            </button>
+
+            {createdId && (
+              <>
+                <button
+                  onClick={() =>
+                    download(`${API_BASE}/invoices/${createdId}/pdf/`)
+                  }
+                  style={{
+                    padding: '14px 32px',
+                    fontSize: '16px',
+                    background:
+                      'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '8px',
+                    cursor: 'pointer',
+                    fontWeight: 600,
+                  }}
+                >
+                  Download PDF
+                </button>
+
+                <button
+                  onClick={() =>
+                    download(`${API_BASE}/invoices/${createdId}/excel/`)
+                  }
+                  style={{
+                    padding: '14px 32px',
+                    fontSize: '16px',
+                    background:
+                      'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '8px',
+                    cursor: 'pointer',
+                    fontWeight: 600,
+                  }}
+                >
+                  Download Excel
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
