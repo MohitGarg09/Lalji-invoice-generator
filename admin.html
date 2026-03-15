@@ -1,0 +1,498 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Admin Portal - Lalji Caterers</title>
+  <meta name="description" content="Admin portal for Lalji Caterers management system">
+  <meta name="robots" content="noindex, nofollow">
+  
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&family=Playfair+Display:wght@600;700;800&display=swap" rel="stylesheet">
+
+  <!-- Main CSS -->
+  <link rel="stylesheet" href="assets/css/style.css">
+  
+  <!-- Admin Portal Styles -->
+  <style>
+    .admin-container {
+      min-height: 100vh;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      font-family: 'Poppins', system-ui, -apple-system, sans-serif;
+    }
+
+    .admin-login-card {
+      background: white;
+      border-radius: 16px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+      padding: 48px;
+      max-width: 400px;
+      width: 100%;
+      text-align: center;
+    }
+
+    .admin-logo {
+      width: 80px;
+      height: 80px;
+      margin: 0 auto 24px;
+      border-radius: 50%;
+    }
+
+    .admin-title {
+      font-family: 'Playfair Display', serif;
+      font-size: 28px;
+      font-weight: 700;
+      color: #1f2937;
+      margin-bottom: 8px;
+    }
+
+    .admin-subtitle {
+      color: #6b7280;
+      font-size: 14px;
+      margin-bottom: 32px;
+    }
+
+    .admin-form-group {
+      margin-bottom: 20px;
+      text-align: left;
+    }
+
+    .admin-label {
+      display: block;
+      font-size: 14px;
+      font-weight: 600;
+      color: #374151;
+      margin-bottom: 8px;
+    }
+
+    .admin-input-wrapper {
+      position: relative;
+    }
+
+    .admin-input {
+      width: 100%;
+      padding: 12px 40px 12px 16px;
+      font-size: 15px;
+      border: 2px solid #e5e7eb;
+      border-radius: 8px;
+      box-sizing: border-box;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    .admin-input:focus {
+      border-color: #667eea;
+    }
+
+    .admin-input.error {
+      border-color: #ef4444;
+    }
+
+    .admin-password-toggle {
+      position: absolute;
+      right: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      background: none;
+      border: none;
+      cursor: pointer;
+      font-size: 18px;
+      color: #6b7280;
+      padding: 4px;
+    }
+
+    .admin-error {
+      margin: 8px 0 0 0;
+      color: #ef4444;
+      font-size: 13px;
+    }
+
+    .admin-button {
+      width: 100%;
+      padding: 14px;
+      font-size: 16px;
+      font-weight: 600;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: opacity 0.2s;
+    }
+
+    .admin-button:hover {
+      opacity: 0.9;
+    }
+
+    .admin-button:disabled {
+      background: #9ca3af;
+      cursor: not-allowed;
+    }
+
+    .admin-footer {
+      margin: 24px 0 0 0;
+      font-size: 12px;
+      color: #9ca3af;
+      text-align: center;
+    }
+
+    .admin-dashboard {
+      display: none;
+      background: white;
+      border-radius: 16px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+      padding: 32px;
+      max-width: 1200px;
+      width: 100%;
+      min-height: 80vh;
+    }
+
+    .admin-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 32px;
+      padding-bottom: 16px;
+      border-bottom: 2px solid #e5e7eb;
+    }
+
+    .admin-header h1 {
+      font-family: 'Playfair Display', serif;
+      font-size: 32px;
+      color: #1f2937;
+      margin: 0;
+    }
+
+    .admin-logout {
+      background: #ef4444;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: 600;
+    }
+
+    .admin-modules {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 24px;
+    }
+
+    .admin-module-card {
+      border: 2px solid #e5e7eb;
+      border-radius: 12px;
+      padding: 24px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.3s ease;
+    }
+
+    .admin-module-card:hover {
+      border-color: #667eea;
+      box-shadow: 0 10px 30px rgba(102, 126, 234, 0.1);
+    }
+
+    .admin-module-icon {
+      font-size: 48px;
+      margin-bottom: 16px;
+    }
+
+    .admin-module-title {
+      font-size: 20px;
+      font-weight: 600;
+      color: #1f2937;
+      margin-bottom: 8px;
+    }
+
+    .admin-module-description {
+      color: #6b7280;
+      font-size: 14px;
+    }
+
+    .invoice-generator-container {
+      display: none;
+      background: white;
+      border-radius: 0;
+      box-shadow: none;
+      padding: 0;
+      max-width: 100%;
+      width: 100%;
+      min-height: 100vh;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      overflow: hidden;
+    }
+
+    .invoice-generator-header {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      padding: 20px 32px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-radius: 0;
+      position: relative;
+      z-index: 10;
+    }
+
+    .invoice-generator-header h2 {
+      margin: 0;
+      font-size: 24px;
+    }
+
+    .back-to-dashboard {
+      background: rgba(255, 255, 255, 0.2);
+      color: white;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: 600;
+    }
+
+    #invoice-app {
+      height: 70vh;
+      overflow-y: auto;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="admin-container">
+    <!-- Login Form -->
+    <div class="admin-login-card" id="loginForm">
+      <img src="assets/images/lalji_logo.png" alt="Lalji Caterers" class="admin-logo">
+      <h1 class="admin-title">Admin Portal</h1>
+      <p class="admin-subtitle">Enter password to access management system</p>
+
+      <form id="adminLoginForm">
+        <div class="admin-form-group">
+          <label class="admin-label" for="adminPassword">Password</label>
+          <div class="admin-input-wrapper">
+            <input 
+              type="password" 
+              id="adminPassword" 
+              class="admin-input" 
+              placeholder="Enter admin password"
+              autofocus
+            >
+            <button type="button" class="admin-password-toggle" id="passwordToggle">👁️</button>
+          </div>
+          <div class="admin-error" id="errorMessage"></div>
+        </div>
+
+        <button type="submit" class="admin-button" id="loginButton">Login</button>
+      </form>
+
+      <p class="admin-footer">
+        This is a private admin system. Unauthorized access is prohibited.
+      </p>
+    </div>
+
+    <!-- Admin Dashboard -->
+    <div class="admin-dashboard" id="adminDashboard">
+      <div class="admin-header">
+        <h1>Admin Dashboard</h1>
+        <button class="admin-logout" id="logoutButton">Logout</button>
+      </div>
+
+      <div class="admin-modules">
+        <div class="admin-module-card" id="invoiceGeneratorModule">
+          <div class="admin-module-icon">🧾</div>
+          <div class="admin-module-title">Invoice Generator</div>
+          <div class="admin-module-description">Create and manage invoices for catering services</div>
+        </div>
+
+        <div class="admin-module-card">
+          <div class="admin-module-icon">📊</div>
+          <div class="admin-module-title">Analytics</div>
+          <div class="admin-module-description">View business insights and reports</div>
+        </div>
+
+        <div class="admin-module-card">
+          <div class="admin-module-icon">📅</div>
+          <div class="admin-module-title">Event Management</div>
+          <div class="admin-module-description">Manage catering events and schedules</div>
+        </div>
+
+        <div class="admin-module-card">
+          <div class="admin-module-icon">👥</div>
+          <div class="admin-module-title">Customer CRM</div>
+          <div class="admin-module-description">Manage customer relationships</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Invoice Generator Container -->
+    <div class="invoice-generator-container" id="invoiceGeneratorContainer">
+      <div class="invoice-generator-header">
+        <h2>Invoice Generator</h2>
+        <button class="back-to-dashboard" id="backToDashboard">← Back to Dashboard</button>
+      </div>
+      <div id="invoice-app"></div>
+    </div>
+  </div>
+
+  <!-- React App Scripts -->
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <script>
+    // Admin Portal JavaScript
+    const API_BASE = 'http://127.0.0.1:8000/api'; // Update this for production
+
+    // DOM Elements
+    const loginForm = document.getElementById('loginForm');
+    const adminDashboard = document.getElementById('adminDashboard');
+    const invoiceGeneratorContainer = document.getElementById('invoiceGeneratorContainer');
+    const adminLoginForm = document.getElementById('adminLoginForm');
+    const adminPassword = document.getElementById('adminPassword');
+    const passwordToggle = document.getElementById('passwordToggle');
+    const errorMessage = document.getElementById('errorMessage');
+    const loginButton = document.getElementById('loginButton');
+    const logoutButton = document.getElementById('logoutButton');
+    const invoiceGeneratorModule = document.getElementById('invoiceGeneratorModule');
+    const backToDashboard = document.getElementById('backToDashboard');
+
+    // Check if already authenticated
+    if (sessionStorage.getItem('adminAuthenticated') === 'true') {
+      showDashboard();
+    }
+
+    // Password toggle
+    passwordToggle.addEventListener('click', () => {
+      const type = adminPassword.type === 'password' ? 'text' : 'password';
+      adminPassword.type = type;
+      passwordToggle.textContent = type === 'password' ? '👁️' : '🙈';
+    });
+
+    // Login form submission
+    adminLoginForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      
+      const password = adminPassword.value.trim();
+      if (!password) {
+        showError('Please enter a password');
+        return;
+      }
+
+      setLoading(true);
+      hideError();
+
+      try {
+        const response = await fetch(`${API_BASE}/invoices/verify_access/`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+          },
+          body: JSON.stringify({ password }),
+        });
+
+        if (!response.ok) {
+          throw new Error('Invalid credentials');
+        }
+
+        const data = await response.json();
+        
+        if (data.success) {
+          sessionStorage.setItem('adminAuthenticated', 'true');
+          showDashboard();
+        } else {
+          showError(data.message || 'Invalid password');
+        }
+      } catch (error) {
+        console.error('Login error:', error);
+        showError('Cannot connect to server. Please check your connection.');
+      } finally {
+        setLoading(false);
+      }
+    });
+
+    // Logout
+    logoutButton.addEventListener('click', () => {
+      sessionStorage.removeItem('adminAuthenticated');
+      showLogin();
+    });
+
+    // Module clicks
+    invoiceGeneratorModule.addEventListener('click', () => {
+      showInvoiceGenerator();
+    });
+
+    backToDashboard.addEventListener('click', () => {
+      showDashboard();
+    });
+
+    // Helper functions
+    function showLogin() {
+      loginForm.style.display = 'block';
+      adminDashboard.style.display = 'none';
+      invoiceGeneratorContainer.style.display = 'none';
+      adminPassword.value = '';
+      hideError();
+    }
+
+    function showDashboard() {
+      loginForm.style.display = 'none';
+      adminDashboard.style.display = 'block';
+      invoiceGeneratorContainer.style.display = 'none';
+    }
+
+    function showInvoiceGenerator() {
+      loginForm.style.display = 'none';
+      adminDashboard.style.display = 'none';
+      invoiceGeneratorContainer.style.display = 'block';
+      
+      // Load the React Invoice Generator app
+      loadInvoiceGenerator();
+    }
+
+    function showError(message) {
+      errorMessage.textContent = message;
+      adminPassword.classList.add('error');
+    }
+
+    function hideError() {
+      errorMessage.textContent = '';
+      adminPassword.classList.remove('error');
+    }
+
+    function setLoading(loading) {
+      loginButton.disabled = loading;
+      loginButton.textContent = loading ? 'Verifying...' : 'Login';
+    }
+
+    // Load Invoice Generator React App
+    function loadInvoiceGenerator() {
+      const container = document.getElementById('invoice-app');
+      
+      // Clear previous content
+      container.innerHTML = '';
+
+      // Create an iframe to load the React app
+      const iframe = document.createElement('iframe');
+      iframe.src = 'admin/invoice-app/index.html';
+      iframe.style.width = '100%';
+      iframe.style.height = '100vh';
+      iframe.style.border = 'none';
+      iframe.style.position = 'fixed';
+      iframe.style.top = '0';
+      iframe.style.left = '0';
+      
+      container.appendChild(iframe);
+    }
+  </script>
+</body>
+</html>
