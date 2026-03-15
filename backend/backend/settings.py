@@ -11,6 +11,17 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
 from pathlib import Path
+import os   # add this near the top if not already present
+
+# Build paths inside the project like this: BASE_DIR / 'subdir'.
+BASE_DIR = Path(__file__).resolve().parent.parent
+
+# --- Invoice / exports configuration ---
+# Directory where generated invoice PDFs will be saved (persist on Render disk or S3-mounted path)
+INVOICE_PDF_DIR = os.environ.get("INVOICE_PDF_DIR", os.path.join(BASE_DIR, "invoices"))
+
+# Master Excel file path where all invoice records are stored (single file)
+INVOICE_MASTER_EXCEL = os.environ.get("INVOICE_MASTER_EXCEL", os.path.join(BASE_DIR, "invoice_excel.xlsx"))
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -20,12 +31,13 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-#cb#p&&mh&(853rjks314b17jltcd7j+2o-s&&i$_vt6(rhxx_'
+SECRET_KEY = os.environ.get('SECRET_KEY', 'dev-secret-unsafe')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = os.environ.get('DEBUG', '0') == '1'
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = [h.strip() for h in os.environ.get('ALLOWED_HOSTS', '*').split(',') if h.strip()]
+CSRF_TRUSTED_ORIGINS = [o.strip() for o in os.environ.get('CSRF_TRUSTED_ORIGINS', '').split(',') if o.strip()]
 
 
 # Application definition
@@ -41,7 +53,7 @@ INSTALLED_APPS = [
     'rest_framework',
     'corsheaders',
     # Local apps
-    'billing',
+    'billing.apps.BillingConfig',  # Use app config to ensure signals are loaded
 ]
 
 MIDDLEWARE = [
@@ -54,6 +66,13 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
+
+# Add WhiteNoise middleware if available (for production static file serving)
+try:
+    import whitenoise
+    MIDDLEWARE.insert(1, 'whitenoise.middleware.WhiteNoiseMiddleware')
+except ImportError:
+    pass  # WhiteNoise not installed, skip (fine for development)
 
 ROOT_URLCONF = 'backend.urls'
 
@@ -78,12 +97,28 @@ WSGI_APPLICATION = 'backend.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+if os.environ.get('DATABASE_URL'):
+    # Simple DATABASE_URL parser (postgres, mysql, etc.) via dj-database-url if available
+    try:
+        import dj_database_url  # type: ignore
+        DATABASES = {
+            'default': dj_database_url.parse(os.environ['DATABASE_URL'], conn_max_age=600)
+        }
+    except Exception:
+        # Fallback to sqlite if parsing not available
+        DATABASES = {
+            'default': {
+                'ENGINE': 'django.db.backends.sqlite3',
+                'NAME': BASE_DIR / 'db.sqlite3',
+            }
+        }
+else:
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db.sqlite3',
+        }
     }
-}
 
 
 # Password validation
@@ -121,18 +156,103 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
 
 STATIC_URL = 'static/'
+STATIC_ROOT = os.environ.get('STATIC_ROOT', os.path.join(BASE_DIR, 'staticfiles'))
+MEDIA_URL = '/media/'
+MEDIA_ROOT = os.environ.get('MEDIA_ROOT', os.path.join(BASE_DIR, 'media'))
+
+# File storage configuration
+# For production with S3 (optional - uncomment and configure if using S3)
+# DEFAULT_FILE_STORAGE = 'storages.backends.s3boto3.S3Boto3Storage'
+# AWS_ACCESS_KEY_ID = os.environ.get('AWS_ACCESS_KEY_ID')
+# AWS_SECRET_ACCESS_KEY = os.environ.get('AWS_SECRET_ACCESS_KEY')
+# AWS_STORAGE_BUCKET_NAME = os.environ.get('AWS_STORAGE_BUCKET_NAME')
+# AWS_S3_REGION_NAME = os.environ.get('AWS_S3_REGION_NAME', 'us-east-1')
+
+# WhiteNoise configuration for static files (only if whitenoise is installed)
+try:
+    import whitenoise
+    STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
+except ImportError:
+    pass  # WhiteNoise not installed, use default storage
+
+# Optional additional static dirs (e.g., for logo)
+STATICFILES_DIRS = [p for p in [os.path.join(BASE_DIR, 'static')] if os.path.isdir(p)]
 
 # DRF basic settings (can extend later)
 REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.AllowAny',
     ],
+    'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
+    'PAGE_SIZE': 50,
+    # Disable CSRF for API views (DRF handles authentication separately)
+    'DEFAULT_AUTHENTICATION_CLASSES': [],
 }
 
-# CORS
-CORS_ALLOW_ALL_ORIGINS = True
+# CORS (configure strict origins in production)
+# Allow specific origins from environment variable, or allow all if not set (development)
+# Strip trailing slashes from origins (Django corsheaders doesn't allow paths in origins)
+CORS_ALLOWED_ORIGINS = [o.strip().rstrip('/') for o in os.environ.get('CORS_ALLOWED_ORIGINS', '').split(',') if o.strip()] if os.environ.get('CORS_ALLOWED_ORIGINS') else []
+# If CORS_ALLOWED_ORIGINS is not set or empty, allow all origins (for development)
+CORS_ALLOW_ALL_ORIGINS = not bool(CORS_ALLOWED_ORIGINS)
+# Allow credentials (cookies, authorization headers)
+CORS_ALLOW_CREDENTIALS = True
+# Allow common headers
+CORS_ALLOW_HEADERS = [
+    'accept',
+    'accept-encoding',
+    'authorization',
+    'content-type',
+    'dnt',
+    'origin',
+    'user-agent',
+    'x-csrftoken',
+    'x-requested-with',
+]
+# Allow all methods
+CORS_ALLOW_METHODS = [
+    'DELETE',
+    'GET',
+    'OPTIONS',
+    'PATCH',
+    'POST',
+    'PUT',
+]
+# Expose headers
+CORS_EXPOSE_HEADERS = ['content-type', 'x-csrftoken']
+
+# Access password for general application access (required to use the app)
+# In production, use proper authentication system
+# Defaults to 'Lalji@2025' if not set via environment variable
+ACCESS_PASSWORD = os.environ.get('ACCESS_PASSWORD', 'Lalji@2025')
+
+# Admin password for CRM editing (simple password-based auth)
+# In production, use proper authentication system
+ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD', 'Admin@2025')
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+# Security settings for production (HTTPS)
+# Render automatically handles HTTPS, but these settings ensure secure cookies
+if not DEBUG:
+    SECURE_SSL_REDIRECT = os.environ.get('SECURE_SSL_REDIRECT', 'False') == 'True'  # Render handles this
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    SECURE_HSTS_SECONDS = int(os.environ.get('SECURE_HSTS_SECONDS', '31536000'))  # 1 year
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD = True
+
+# Logging configuration
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "handlers": {"console": {"class": "logging.StreamHandler"}},
+    "root": {"handlers": ["console"], "level": "INFO"},
+    "loggers": {
+        "billing": {"handlers": ["console"], "level": "INFO", "propagate": True},
+        "billing.signals": {"handlers": ["console"], "level": "INFO", "propagate": True},
+    },
+}
